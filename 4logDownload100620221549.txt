@@ -1,2 +1,0 @@
-2022/10/06 15:49:07 Start
-2022/10/06 15:49:07 Get "1/get_record_file.cgi?PageSize=10000&loginpas=3&loginuse=2": unsupported protocol scheme ""
