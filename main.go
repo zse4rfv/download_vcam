@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -9,19 +10,27 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/t3rm1n4l/go-mega"
 )
 
 func main() {
 
-	url := "http://jrcfyxbr.ddns.net:33333"
-	user := "admin"
-	pass := "jrcfyxbr"
-	catalog := "C:\\Temp\\"
+	url := flag.String("url", "", "url")
+	user := flag.String("user", "", "user")
+	pass := flag.String("pass", "", "pass")
+	catalog := flag.String("catalog", "", "catalog")
+	//	mg_email := flag.String("mgemail", "", "mega email")
+	//	mg_pass := flag.String("mgpass", "", "mega pass")
+	//	mg_catalog := flag.String("mgcatalog", "", "mega catalog")
 
-	email := "demon_ice@hotbox.ru"
-	pass_mg := "Otyid5tPid5t"
+	flag.Parse()
+
+	if *url == "" || *user == "" || *pass == "" {
+		log.Fatalf("Error input arguments: Needs -url=http://temp.com:999 -user=admin -pass=12345 -catalog=C:\\Temp\\") //-mgemail=admin@live.com -mgpass=12345 -mgcatalog=Vs")
+	}
+
+	/* MEGA - Cloud Upload test
+	email := ""
+	pass_mg := ""
 	cat := "Vcam"
 	file_name := "20221004193413_100.h264"
 
@@ -69,11 +78,11 @@ func main() {
 		}
 		println(m)
 	}
-
+	*/
 	client := &http.Client{}
 	tm := time.Now()
 
-	f, err := os.OpenFile(catalog+"logDownload.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(*catalog+"logDownload"+tm.Format("010220061504")+".txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("Error opening file: %v", err)
 	}
@@ -82,7 +91,7 @@ func main() {
 
 	log.Println("Start")
 	println(tm.Format("01/02/2006 15:04"), "Start")
-	GetVideo(client, url, user, pass, catalog)
+	GetVideo(client, *url, *user, *pass, *catalog)
 	tm = time.Now()
 	log.Println("Finish")
 	println(tm.Format("01/02/2006 15:04"), "Finish")
@@ -92,12 +101,16 @@ func main() {
 func GetVideo(client *http.Client, url string, username string, passwd string, catalog string) string {
 
 	var e, w, i int
-	/*	client := &http.Client{}
-		req, err := http.NewRequest("GET", url+"/get_record_file.cgi"+"?PageSize=10000", nil)
-		req.SetBasicAuth(username, passwd)
-		resp, err := client.Do(req) */
 
-	resp, err := http.Get(url + "/get_record_file.cgi" + "?loginuse=" + username + "&loginpas=" + passwd + "&PageSize=10000")
+	req, err := http.NewRequest(http.MethodGet, url+"/get_record_file.cgi?PageSize=10000", nil)
+	//req.SetBasicAuth(username, passwd)
+	q := req.URL.Query()
+	q.Add("loginuse", username)
+	q.Add("loginpas", passwd)
+	req.URL.RawQuery = q.Encode() // assign encoded query string to http request
+
+	resp, err := client.Do(req)
+	//resp, err := http.Get(url + "/get_record_file.cgi" + "?loginuse=" + username + "&loginpas=" + passwd + "&PageSize=10000")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -145,7 +158,7 @@ func GetVideo(client *http.Client, url string, username string, passwd string, c
 		tm := time.Now()
 		log.Println(len(files), file+1, files[file]) //, "size:", filelenghts[file])
 		print(tm.Format("01/02/2006 15:04 "), len(files), "/", file+1, " ", files[file])
-		r := downloadfile(fileurl, files[file], catalog)
+		r := downloadfile(client, fileurl, files[file], catalog)
 		switch r {
 		case 0:
 			e++
@@ -163,7 +176,7 @@ func GetVideo(client *http.Client, url string, username string, passwd string, c
 	return "Ok"
 }
 
-func downloadfile(fileurl, file, catalog string) int {
+func downloadfile(client *http.Client, fileurl, file, catalog string) int {
 
 	if _, err := os.Stat(catalog + file); errors.Is(err, os.ErrNotExist) {
 		//OK
@@ -172,7 +185,9 @@ func downloadfile(fileurl, file, catalog string) int {
 		return 2
 	}
 
-	resp, err := http.Get(fileurl)
+	req, err := http.NewRequest(http.MethodGet, fileurl, nil)
+	resp, err := client.Do(req)
+	//resp, err := http.Get(fileurl)
 	if err != nil {
 		log.Println("Error get file, skip")
 		//log.Fatal(err)
@@ -184,6 +199,12 @@ func downloadfile(fileurl, file, catalog string) int {
 	if err != nil || len(dwn) <= 0 {
 		log.Println("Error read file, skip")
 		//log.Fatal(err)
+		return 0
+	}
+
+	s := string(dwn)
+	if strings.Contains(s, "Error: Unauthorized") {
+		log.Println("Error: Invalid user credentials, skip")
 		return 0
 	}
 
