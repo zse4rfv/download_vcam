@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/net/html"
 )
 
 func main() {
@@ -18,11 +20,19 @@ func main() {
 	user := flag.String("user", "", "user")
 	pass := flag.String("pass", "", "pass")
 	catalog := flag.String("catalog", "", "catalog")
+	typecam := flag.String("typecam", "", "typecam")
 	//	mg_email := flag.String("mgemail", "", "mega email")
 	//	mg_pass := flag.String("mgpass", "", "mega pass")
 	//	mg_catalog := flag.String("mgcatalog", "", "mega catalog")
 
 	flag.Parse()
+
+	//temper var
+	*url = "http://jrcfyxbr.ddns.net:33334"
+	*user = "admin"
+	*pass = "jrcfyxbr"
+	*catalog = "C:\\Temp\\v\\"
+	*typecam = "1"
 
 	if *url == "" || *user == "" || *pass == "" {
 		log.Fatalf("Error input arguments: Needs -url=http://temp.com:999 -user=admin -pass=12345 -catalog=C:\\Temp\\") //-mgemail=admin@live.com -mgpass=12345 -mgcatalog=Vs")
@@ -91,74 +101,174 @@ func main() {
 
 	log.Println("Start")
 	println(tm.Format("01/02/2006 15:04"), "Start")
-	GetVideo(client, *url, *user, *pass, *catalog)
+	GetVideo(client, *url, *user, *pass, *catalog, *typecam)
 	tm = time.Now()
 	log.Println("Finish")
 	println(tm.Format("01/02/2006 15:04"), "Finish")
 
 }
 
-func GetVideo(client *http.Client, url string, username string, passwd string, catalog string) string {
+func get_content_data(doc *html.Node, strtype string) []string {
+
+	content := []string{}
+
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "a" {
+			for _, a := range n.Attr {
+				if a.Key == "href" && (strings.HasPrefix(a.Val, strtype) || strings.HasSuffix(a.Val, strtype)) {
+					content = append(content, a.Val)
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(doc)
+
+	return content
+}
+
+func GetVideo(client *http.Client, url string, username string, passwd string, catalog string, typecam string) string {
 
 	var e, w, i int
-
-	req, err := http.NewRequest(http.MethodGet, url+"/get_record_file.cgi?PageSize=10000", nil)
-	//req.SetBasicAuth(username, passwd)
-	q := req.URL.Query()
-	q.Add("loginuse", username)
-	q.Add("loginpas", passwd)
-	req.URL.RawQuery = q.Encode() // assign encoded query string to http request
-
-	resp, err := client.Do(req)
-	//resp, err := http.Get(url + "/get_record_file.cgi" + "?loginuse=" + username + "&loginpas=" + passwd + "&PageSize=10000")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	bodyText, err := ioutil.ReadAll(resp.Body)
-	s := string(bodyText)
-
-	if strings.Contains(s, "Auth Failed") {
-		log.Fatal("Error - Invalid user credentials")
-	}
-
 	files := make([]string, 0)
 	filelenghts := make([]string, 0)
 
-	lines := strings.Split(s, "\n")
+	switch typecam {
+	case "1":
+		{
+			req, err := http.NewRequest(http.MethodGet, url+"/sd/", nil)
+			req.SetBasicAuth(username, passwd)
+			q := req.URL.Query()
+			req.URL.RawQuery = q.Encode() // assign encoded query string to http request
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer resp.Body.Close()
 
-	for line := range lines {
-		s := lines[line]
+			bodyText, err := ioutil.ReadAll(resp.Body)
+			s := string(bodyText)
 
-		index := strings.Index(s, "h264")
-		if index > 0 {
-			files = append(files, s[(index-19):index+4])
-		}
-		index = strings.Index(s, "record_size0[")
-		if index >= 0 {
-			first := index + 16
-			last := index + 24
-			for i := index; i < len(s); i++ {
-				smb := string(s[i])
-				if smb == "=" {
-					first = i + 1
-				} else if smb == ";" {
-					last = i
+			if strings.Contains(s, "Auth Failed") || strings.Contains(s, "Error: username or password error") {
+				log.Fatal("Error - Invalid user credentials")
+			}
+
+			doc, err := html.Parse(strings.NewReader(s))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			content := get_content_data(doc, "/sd/20")
+
+			for cnt := range content {
+				file_str := url + content[cnt] + "record000/"
+				//fmt.Println(file_str)
+				req, err := http.NewRequest(http.MethodGet, file_str, nil)
+				req.SetBasicAuth(username, passwd)
+				q := req.URL.Query()
+				req.URL.RawQuery = q.Encode() // assign encoded query string to http request
+				resp, err := client.Do(req)
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer resp.Body.Close()
+				bodyText, err := ioutil.ReadAll(resp.Body)
+				s = string(bodyText)
+				if strings.Contains(s, "Auth Failed") || strings.Contains(s, "Error: username or password error") {
+					log.Fatal("Error - Invalid user credentials")
+				}
+
+				doc, err := html.Parse(strings.NewReader(s))
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				contentf := get_content_data(doc, ".265")
+				for cntf := range contentf {
+					//fmt.Println(contentf[cntf])
+					files = append(files, contentf[cntf])
+				}
+				contentf = get_content_data(doc, ".264")
+				for cntf := range contentf {
+					//fmt.Println(contentf[cntf])
+					files = append(files, contentf[cntf])
 				}
 			}
-			filelenghts = append(filelenghts, s[first:last])
+		}
+	default:
+		{
+			req, err := http.NewRequest(http.MethodGet, url+"/get_record_file.cgi?PageSize=10000", nil)
+			q := req.URL.Query()
+			q.Add("loginuse", username)
+			q.Add("loginpas", passwd)
+			req.URL.RawQuery = q.Encode() // assign encoded query string to http request
+			resp, err := client.Do(req)
+			//resp, err := http.Get(url + "/get_record_file.cgi" + "?loginuse=" + username + "&loginpas=" + passwd + "&PageSize=10000")
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer resp.Body.Close()
+
+			bodyText, err := ioutil.ReadAll(resp.Body)
+			s := string(bodyText)
+
+			if strings.Contains(s, "Auth Failed") {
+				log.Fatal("Error - Invalid user credentials")
+			}
+
+			lines := strings.Split(s, "\n")
+
+			for line := range lines {
+				s := lines[line]
+
+				index := strings.Index(s, "h264")
+				if index > 0 {
+					files = append(files, s[(index-19):index+4])
+				}
+				index = strings.Index(s, "record_size0[")
+				if index >= 0 {
+					first := index + 16
+					last := index + 24
+					for i := index; i < len(s); i++ {
+						smb := string(s[i])
+						if smb == "=" {
+							first = i + 1
+						} else if smb == ";" {
+							last = i
+						}
+					}
+					filelenghts = append(filelenghts, s[first:last])
+				}
+			}
+
 		}
 	}
 
 	sort.Sort(sort.StringSlice(files))
+	var fileurl, str_file string
 
 	for file := range files {
-		fileurl := url + "/record/" + files[file] + "?loginuse=" + username + "&loginpas=" + passwd
+		switch typecam {
+		case "1":
+			{
+				str_http := "http://"
+				fileurl = str_http + username + ":" + passwd + "@" + strings.TrimPrefix(url, str_http) + files[file]
+				str_file = strings.TrimRight(files[file], "/")
+				str_file = strings.Split(str_file, "/")[len(strings.Split(str_file, "/"))-1]
+			}
+		default:
+			{
+				fileurl = url + "/record/" + files[file] + "?loginuse=" + username + "&loginpas=" + passwd
+				str_file = files[file]
+			}
+		}
 		tm := time.Now()
-		log.Println(len(files), file+1, files[file]) //, "size:", filelenghts[file])
-		print(tm.Format("01/02/2006 15:04 "), len(files), "/", file+1, " ", files[file])
-		r := downloadfile(client, fileurl, files[file], catalog)
+		log.Println(len(files), file+1, str_file) //, "size:", filelenghts[file])
+		print(tm.Format("01/02/2006 15:04 "), len(files), "/", file+1, " ", str_file)
+		r := downloadfile(client, fileurl, str_file, catalog)
 		switch r {
 		case 0:
 			e++
