@@ -1,4 +1,4 @@
-module go_my
+module github.com/zse4rfv/download_vcam
 
 go 1.19
 
