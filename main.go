@@ -27,13 +27,6 @@ func main() {
 
 	flag.Parse()
 
-	/*	//temper var
-	*url = "http://jrcfyxbr.ddns.net:33334"
-	*user = "admin"
-	*pass = "jrcfyxbr"
-	*catalog = "C:\\Temp\\v\\"
-	*typecam = "1"*/
-
 	if *url == "" || *user == "" || *pass == "" {
 		log.Fatalf("Error input arguments: Needs -url=http://temp.com:999 -user=admin -pass=12345 -catalog=C:\\Temp\\ -typecam=1") //-mgemail=admin@live.com -mgpass=12345 -mgcatalog=Vs")
 	}
